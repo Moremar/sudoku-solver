@@ -1,5 +1,6 @@
 import copy
 import logging
+import argparse
 
 
 class InvalidGridException(Exception):
@@ -23,7 +24,7 @@ class State:
         for (i, j) in self.possibles:
             if not len(self.possibles[(i, j)]) > 1:
                 raise InvalidGridException('Cell {0} has no possible value'.format((i, j)))
-        # in any lines/column/square, all digits must be either in the grid of in the possibles of the pending cells
+        # in any lines/column/square, all digits must be either in the grid or in the possibles of the pending cells
         for i in range(9):
             used = [self.solved[(i, j)] for j in range(9) if (i, j) in self.solved]
             possibles = set().union(*[self.possibles[(i, j)] for j in range(9) if (i, j) in self.possibles])
@@ -76,7 +77,11 @@ class State:
     def display(self):
         res = ''
         for i in range(9):
+            if i > 0 and i % 3 == 0:
+                res += '-' * 6 + '+' + '-' * 7 + '+' + '-' * 6 + '\n'
             for j in range(9):
+                if j > 0 and j % 3 == 0:
+                    res += '| '
                 res += str(self.solved[(i, j)]) if (i, j) in self.solved else '_'
                 res += ' '
             res += '\n'
@@ -97,7 +102,7 @@ class SudokuEngine:
         self.state = State.initial_state()
         for (i, line) in enumerate(grid.split('\n')):
             for (j, c) in enumerate(line):
-                if c != ' ':
+                if c not in [' ', '_']:
                     self.state.set(i, j, int(c))
 
     def reduce_lines(self):
@@ -174,7 +179,9 @@ class SudokuEngine:
                 if (i, j) != (x, y) and (x, y) in self.state.possibles:
                     other_square_possibles = other_square_possibles.union(self.state.possibles[(x, y)])
             for val in self.state.possibles[(i, j)]:
-                if val not in other_line_possibles or val not in other_column_possibles:
+                if val not in other_line_possibles \
+                        or val not in other_column_possibles \
+                        or val not in other_square_possibles:
                     self.state.set(i, j, val)
                     logging.debug('Single option : {0}'.format((i, j, val)))
                     return i, j, val
@@ -211,7 +218,7 @@ class SudokuEngine:
                 for (i, j) in self.state.possibles:
                     if len(self.state.possibles[(i, j)]) == min_possibles_len:
                         val = self.state.possibles[(i, j)].pop()
-                        logging.info('Take guess ({0}, {1}) = {2}'.format(i, j, val))
+                        logging.debug('Take guess ({0}, {1}) = {2}'.format(i, j, val))
                         new_state = self.state.clone()
                         new_state.set(i, j, val)
                         self.rollback_states.append(self.state)
@@ -220,13 +227,22 @@ class SudokuEngine:
 
             except InvalidGridException as e:
                 logging.debug(e)
-                logging.info('Invalid state found, rollback last guess')
+                logging.debug('Invalid state found, rollback last guess')
                 self.state = self.rollback_states.pop()
 
         logging.info('Solved grid :\n' + self.state.display())
 
 
 if __name__ == '__main__':
-    logging.basicConfig(format='[%(levelname)s] %(message)s', level=logging.INFO)
-    with open('sample.txt', 'r') as f:
+    # arguments parser
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--input', default='sample.txt', help='input sudoku file')
+    parser.add_argument('-d', '--debug', action='store_true')
+    args = parser.parse_args()
+
+    # setup logger
+    log_level = logging.DEBUG if args.debug else logging.INFO
+    logging.basicConfig(format='[%(levelname)s] %(message)s', level=log_level)
+
+    with open(args.input, 'r') as f:
         SudokuEngine(f.read()).solve()
